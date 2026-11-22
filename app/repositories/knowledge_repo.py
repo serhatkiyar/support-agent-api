@@ -1,4 +1,4 @@
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import models
@@ -26,6 +26,27 @@ class KnowledgeRepository:
         await self.db.commit()
         await self.db.refresh(chunk)
         return chunk
+
+    async def get_document(
+        self, document_id: int
+    ) -> models.KnowledgeDocument | None:
+        stmt = select(models.KnowledgeDocument).where(
+            models.KnowledgeDocument.id == document_id
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_documents(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[models.KnowledgeDocument]:
+        stmt = (
+            select(models.KnowledgeDocument)
+            .order_by(models.KnowledgeDocument.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def delete_document(self, document_id: int) -> None:
         stmt = delete(models.KnowledgeDocument).where(
