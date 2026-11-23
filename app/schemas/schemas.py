@@ -50,7 +50,6 @@ class DocumentChunk(BaseModel):
     content: str
     chunk_index: int
     embedding: list[float]
-    search_vector: list[float]
 
 
 class DocumentChunkIn(DocumentChunk):

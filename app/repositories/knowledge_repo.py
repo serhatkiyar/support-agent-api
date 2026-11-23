@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import models
@@ -18,18 +18,17 @@ class KnowledgeRepository:
         await self.db.refresh(db_document)
         return db_document
 
-    async def add_chunks(
-        self, document_chunk: DocumentChunkIn
-    ) -> models.DocumentChunk:
-        chunk = models.DocumentChunk(**document_chunk.model_dump())
+    async def add_chunks(self, document_chunk: DocumentChunkIn) -> models.DocumentChunk:
+        chunk = models.DocumentChunk(
+            **document_chunk.model_dump(),
+            search_vector=func.to_tsvector("turkish", document_chunk.content),
+        )
         self.db.add(chunk)
         await self.db.commit()
         await self.db.refresh(chunk)
         return chunk
 
-    async def get_document(
-        self, document_id: int
-    ) -> models.KnowledgeDocument | None:
+    async def get_document(self, document_id: int) -> models.KnowledgeDocument | None:
         stmt = select(models.KnowledgeDocument).where(
             models.KnowledgeDocument.id == document_id
         )
@@ -55,5 +54,5 @@ class KnowledgeRepository:
         await self.db.execute(stmt)
         await self.db.commit()
 
-    async def search(self, embedding: list[float], search_vector: list[float]):
+    async def search(self, embedding: list[float], search_vector: str):
         pass
