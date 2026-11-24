@@ -1,8 +1,10 @@
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import models
 from ..schemas.schemas import DocumentChunkIn, KnowledgeDocumentIn
+
+TS_CONFIG = "turkish"
 
 
 class KnowledgeRepository:
@@ -18,17 +20,21 @@ class KnowledgeRepository:
         await self.db.refresh(db_document)
         return db_document
 
-    async def add_chunks(self, document_chunk: DocumentChunkIn) -> models.DocumentChunk:
+    async def add_chunks(
+        self, document_chunk: DocumentChunkIn
+    ) -> models.DocumentChunk:
         chunk = models.DocumentChunk(
             **document_chunk.model_dump(),
-            search_vector=func.to_tsvector("turkish", document_chunk.content),
+            search_vector=func.to_tsvector(TS_CONFIG, document_chunk.content),
         )
         self.db.add(chunk)
         await self.db.commit()
         await self.db.refresh(chunk)
         return chunk
 
-    async def get_document(self, document_id: int) -> models.KnowledgeDocument | None:
+    async def get_document(
+        self, document_id: int
+    ) -> models.KnowledgeDocument | None:
         stmt = select(models.KnowledgeDocument).where(
             models.KnowledgeDocument.id == document_id
         )
@@ -54,5 +60,73 @@ class KnowledgeRepository:
         await self.db.execute(stmt)
         await self.db.commit()
 
-    async def search(self, embedding: list[float], search_vector: str):
-        pass
+    async def search(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        limit: int = 5,
+        rrf_k: int = 60,
+    ) -> list[models.DocumentChunk]:
+        """Hybrid search combining pgvector cosine similarity and PostgreSQL FTS via RRF."""
+        candidate_limit = max(limit * 4, 20)
+
+        semantic_cte = (
+            select(
+                models.DocumentChunk.id.label("id"),
+                func.row_number()
+                .over(
+                    order_by=models.DocumentChunk.embedding.cosine_distance(
+                        query_embedding
+                    )
+                )
+                .label("rank"),
+            )
+            .limit(candidate_limit)
+            .cte("semantic_results")
+        )
+
+        ts_query = func.websearch_to_tsquery(TS_CONFIG, query_text)
+        keyword_cte = (
+            select(
+                models.DocumentChunk.id.label("id"),
+                func.row_number()
+                .over(
+                    order_by=func.ts_rank_cd(
+                        models.DocumentChunk.search_vector, ts_query
+                    ).desc()
+                )
+                .label("rank"),
+            )
+            .where(models.DocumentChunk.search_vector.op("@@")(ts_query))
+            .limit(candidate_limit)
+            .cte("keyword_results")
+        )
+
+        semantic_scores = select(
+            semantic_cte.c.id.label("chunk_id"),
+            (1.0 / (literal(rrf_k) + semantic_cte.c.rank)).label("score"),
+        )
+        keyword_scores = select(
+            keyword_cte.c.id.label("chunk_id"),
+            (1.0 / (literal(rrf_k) + keyword_cte.c.rank)).label("score"),
+        )
+
+        combined = union_all(semantic_scores, keyword_scores).subquery("combined")
+        rrf_scores = (
+            select(
+                combined.c.chunk_id,
+                func.sum(combined.c.score).label("total_score"),
+            )
+            .group_by(combined.c.chunk_id)
+            .order_by(func.sum(combined.c.score).desc())
+            .limit(limit)
+            .subquery("rrf_scores")
+        )
+
+        stmt = (
+            select(models.DocumentChunk)
+            .join(rrf_scores, models.DocumentChunk.id == rrf_scores.c.chunk_id)
+            .order_by(rrf_scores.c.total_score.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
