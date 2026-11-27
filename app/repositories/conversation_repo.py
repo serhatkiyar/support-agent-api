@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import models
+from ..models.enums import ConvStatus
 
 
 class ConversationRepository:
@@ -47,7 +48,7 @@ class ConversationRepository:
     async def update_status(
         self,
         conversation_id: int,
-        status: models.ConvStatus,
+        status: ConvStatus,
         context_metadata: dict | None = None,
     ) -> models.Conversation | None:
         conversation = await self.get_conversation(conversation_id)

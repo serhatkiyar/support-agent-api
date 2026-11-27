@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import TIMESTAMP, ForeignKey, Index, text
@@ -7,28 +6,22 @@ from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-
-class ConvStatus(str, Enum):
-    active = "ACTIVE"
-    waiting_confirmation = "WAITING_CONFIRMATION"
-    escalated = "ESCALATED"
-    resolved = "RESOLVED"
-
-
-class Priority(str, Enum):
-    low = "LOW"
-    medium = "MEDIUM"
-    high = "HIGH"
-    urgent = "URGENT"
-
-
-class TicketStatus(str, Enum):
-    open = "OPEN"
-    in_progress = "IN_PROGRESS"
-    resolved = "RESOLVED"
+from .enums import ConvStatus, Priority, TicketStatus
 
 
 class Base(DeclarativeBase): ...
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column()
+    email: Mapped[str] = mapped_column(unique=True, nullable=False)
+    password: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
 
 
 class Conversation(Base):
@@ -42,18 +35,6 @@ class Conversation(Base):
         default=ConvStatus.active, server_default="ACTIVE", nullable=False
     )
     context_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
-    )
-
-
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column()
-    email: Mapped[str] = mapped_column(unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
@@ -125,8 +106,12 @@ class Ticket(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     reason: Mapped[str]
     summary: Mapped[str]
-    priority: Mapped[str]
-    status: Mapped[str]
+    priority: Mapped[str] = mapped_column(
+        default=Priority.low, server_default="LOW", nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        default=TicketStatus.open, server_default="OPEN", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
