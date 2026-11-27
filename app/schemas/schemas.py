@@ -1,4 +1,8 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+
+from ..models.enums import ConvStatus, Priority, TicketStatus
 
 
 class UserBase(BaseModel):
@@ -21,13 +25,25 @@ class UserCreate(UserBase):
         return password
 
 
-class Conversation(BaseModel):
+class UserOut(UserBase):
     id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationCreate(BaseModel):
     user_id: int
+    context_metadata: dict | None = None
 
 
-class Message(BaseModel):
+class ConversationOut(ConversationCreate):
     id: int
+    status: ConvStatus
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MessageCreate(BaseModel):
     conversation_id: int
     role: str
     content: str
@@ -36,21 +52,48 @@ class Message(BaseModel):
     confidence_score: float | None = None
 
 
-class KnowledgeDocument(BaseModel):
+class MessageOut(MessageCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeDocumentCreate(BaseModel):
     title: str
     source_type: str
 
 
-class KnowledgeDocumentIn(KnowledgeDocument):
-    pass
+class KnowledgeDocumentOut(KnowledgeDocumentCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
-class DocumentChunk(BaseModel):
+class DocumentChunkBase(BaseModel):
     document_id: int
     content: str
     chunk_index: int
+
+
+class DocumentChunkCreate(DocumentChunkBase):
     embedding: list[float]
 
 
-class DocumentChunkIn(DocumentChunk):
-    pass
+class DocumentChunkOut(DocumentChunkBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketCreate(BaseModel):
+    conversation_id: int
+    user_id: int
+    reason: str
+    summary: str
+    priority: Priority
+    status: TicketStatus
+
+
+class TicketOut(TicketCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)

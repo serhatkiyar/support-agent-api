@@ -2,7 +2,7 @@ from sqlalchemy import delete, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import models
-from ..schemas.schemas import DocumentChunkIn, KnowledgeDocumentIn
+from ..schemas.schemas import DocumentChunkCreate, KnowledgeDocumentCreate
 
 TS_CONFIG = "turkish"
 
@@ -12,7 +12,7 @@ class KnowledgeRepository:
         self.db = db
 
     async def add_document(
-        self, document: KnowledgeDocumentIn
+        self, document: KnowledgeDocumentCreate
     ) -> models.KnowledgeDocument:
         db_document = models.KnowledgeDocument(**document.model_dump())
         self.db.add(db_document)
@@ -21,7 +21,7 @@ class KnowledgeRepository:
         return db_document
 
     async def add_chunks(
-        self, document_chunk: DocumentChunkIn
+        self, document_chunk: DocumentChunkCreate
     ) -> models.DocumentChunk:
         chunk = models.DocumentChunk(
             **document_chunk.model_dump(),
